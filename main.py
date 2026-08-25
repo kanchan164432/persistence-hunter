@@ -49,7 +49,7 @@ def search_and_report():
     total_checked = 0
     
     # Run for 5.5 hours (GitHub shuts down free jobs at 6 hours)
-    run_duration = 5.5 * 60 * 60 
+    run_duration =  100  #5.5 * 60 * 60 
     start_time = time.time()
     
     print("Starting daily hunt...")

@@ -12,16 +12,24 @@ STATE_FILE = "state.json"
 VALID_DIGITS = ['2', '3', '4', '6', '7', '8', '9']
 DIGIT_MAP = {d: i for i, d in enumerate(VALID_DIGITS)}
 
+# Search range boundaries to stay within high-persistence candidate lengths
+MIN_DIGITS = 15
+MAX_DIGITS = 35
+
 def get_start_candidate():
-    """Loads the last processed candidate string, or defaults to a starting length."""
+    """Loads state, or defaults/resets candidate to the 15-35 digit Goldilocks zone."""
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r") as f:
                 data = json.load(f)
-                return data.get("last_candidate", "2" * 20)
+                cand = data.get("last_candidate", "2" * MIN_DIGITS)
+                # Reset automatically if state drifted past 35 digits into the zero-trap range
+                if len(cand) > MAX_DIGITS or len(cand) < MIN_DIGITS:
+                    return "2" * MIN_DIGITS
+                return cand
         except Exception:
             pass
-    return "2" * 20  # Default starting number: 20 digits of '2'
+    return "2" * MIN_DIGITS
 
 def save_state(last_candidate):
     """Saves the last processed candidate string for the next execution."""
@@ -29,7 +37,7 @@ def save_state(last_candidate):
         json.dump({"last_candidate": last_candidate}, f, indent=2)
 
 def next_candidate(current_str):
-    """Generates the lexicographically next sorted string of valid digits."""
+    """Generates next sorted candidate string. Wraps to MIN_DIGITS if MAX_DIGITS is exceeded."""
     chars = list(current_str)
     for i in range(len(chars) - 1, -1, -1):
         if chars[i] != '9':
@@ -37,14 +45,22 @@ def next_candidate(current_str):
             for j in range(i, len(chars)):
                 chars[j] = next_digit
             return "".join(chars)
-    return "2" * (len(chars) + 1)
+    
+    # Increase length, but wrap around to MIN_DIGITS if we exceed MAX_DIGITS
+    next_len = len(chars) + 1
+    if next_len > MAX_DIGITS:
+        return "2" * MIN_DIGITS
+    return "2" * next_len
 
 def get_persistence(n):
+    """Calculates multiplicative persistence using fast integer arithmetic."""
     steps = 0
     while n >= 10:
         prod = 1
-        for digit in str(n):
-            prod *= int(digit)
+        temp = n
+        while temp > 0:
+            temp, digit = divmod(temp, 10)
+            prod *= digit
         n = prod
         steps += 1
     return steps
@@ -106,9 +122,10 @@ def search_and_report():
     hit_jackpot = False
     
     current_str = get_start_candidate()
-    print(f"Resuming sequential search from candidate: {current_str}")
+    print(f"Resuming search from candidate ({len(current_str)} digits): {current_str}")
 
-    run_duration = 5.5 * 60 * 60 
+    # Set duration to 4.5 hours (leaves 1.5 hours safety buffer for GitHub Actions)
+    run_duration = 4.5 * 60 * 60 
     start_time = time.time()
     
     while time.time() - start_time < run_duration:

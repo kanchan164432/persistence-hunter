@@ -1,59 +1,29 @@
-import smtplib
-import os
 import time
 import json
-from email.message import EmailMessage
-from datetime import datetime
+import os
 
-EMAIL_USER = os.environ.get("EMAIL_USER")
-EMAIL_PASS = os.environ.get("EMAIL_PASS")
+STATE_FILE = "state_prime10.json"
 
-STATE_FILE = "state.json"
-VALID_DIGITS = ['2', '3', '4', '6', '7', '8', '9']
-DIGIT_MAP = {d: i for i, d in enumerate(VALID_DIGITS)}
+# Set past recorded history limit (Ben Chaffin searched up to E = 20,000)
+# Default starting threshold set to 20,001 to skip all historically searched numbers
+DEFAULT_START_E = 20001
+CHUNK_SIZE = 50  # Number of exponent levels to process per 4.5-hour run
 
-# Search range boundaries to stay within high-persistence candidate lengths
-MIN_DIGITS = 15
-MAX_DIGITS = 35
-
-def get_start_candidate():
-    """Loads state, or defaults/resets candidate to the 15-35 digit Goldilocks zone."""
+def load_start_exponent():
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r") as f:
                 data = json.load(f)
-                cand = data.get("last_candidate", "2" * MIN_DIGITS)
-                # Reset automatically if state drifted past 35 digits into the zero-trap range
-                if len(cand) > MAX_DIGITS or len(cand) < MIN_DIGITS:
-                    return "2" * MIN_DIGITS
-                return cand
+                return data.get("next_exponent_sum", DEFAULT_START_E)
         except Exception:
             pass
-    return "2" * MIN_DIGITS
+    return DEFAULT_START_E
 
-def save_state(last_candidate):
-    """Saves the last processed candidate string for the next execution."""
+def save_state(next_exponent_sum):
     with open(STATE_FILE, "w") as f:
-        json.dump({"last_candidate": last_candidate}, f, indent=2)
+        json.dump({"next_exponent_sum": next_exponent_sum}, f, indent=2)
 
-def next_candidate(current_str):
-    """Generates next sorted candidate string. Wraps to MIN_DIGITS if MAX_DIGITS is exceeded."""
-    chars = list(current_str)
-    for i in range(len(chars) - 1, -1, -1):
-        if chars[i] != '9':
-            next_digit = VALID_DIGITS[DIGIT_MAP[chars[i]] + 1]
-            for j in range(i, len(chars)):
-                chars[j] = next_digit
-            return "".join(chars)
-    
-    # Increase length, but wrap around to MIN_DIGITS if we exceed MAX_DIGITS
-    next_len = len(chars) + 1
-    if next_len > MAX_DIGITS:
-        return "2" * MIN_DIGITS
-    return "2" * next_len
-
-def get_persistence(n):
-    """Calculates multiplicative persistence using fast integer arithmetic."""
+def get_persistence_b10(n):
     steps = 0
     while n >= 10:
         prod = 1
@@ -65,90 +35,46 @@ def get_persistence(n):
         steps += 1
     return steps
 
-def log_jackpot(number, persistence):
-    entry = {
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "number": str(number),
-        "persistence": persistence
-    }
-    with open("jackpots.json", "a") as f:
-        f.write(json.dumps(entry) + "\n")
-
-def log_daily_summary(best_number, best_persistence, total_checked, end_candidate):
-    entry = {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "total_checked": total_checked,
-        "max_persistence": best_persistence,
-        "winning_number": str(best_number),
-        "ended_at_candidate": end_candidate
-    }
-    with open("daily_history.json", "a") as f:
-        f.write(json.dumps(entry) + "\n")
-
-def send_report(best_number, best_persistence, total_checked, hit_jackpot):
-    if not EMAIL_USER or not EMAIL_PASS:
-        print("Email credentials missing. Skipping email report.")
-        return
-
-    msg = EmailMessage()
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    
-    subject = f"🚨 ALERT: Found Persistence {best_persistence}!" if hit_jackpot else f"Daily Report: Max Persistence {best_persistence}"
-    
-    body = (
-        f"Daily Multiplicative Persistence Report - {date_str}\n"
-        f"{'-'*40}\n"
-        f"Numbers Checked: {total_checked:,}\n"
-        f"Max Persistence Found: {best_persistence}\n"
-        f"Winning Number: {best_number}\n"
-    )
-    msg.set_content(body)
-    msg['Subject'] = subject
-    msg['From'] = EMAIL_USER
-    msg['To'] = EMAIL_USER
-
-    try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10) as server:
-            server.login(EMAIL_USER, EMAIL_PASS)
-            server.send_message(msg)
-        print("Daily report emailed successfully.")
-    except Exception as e:
-        print(f"Failed to send email: {e}")
-
-def search_and_report():
+def search_base10_beyond_history():
+    start_E = load_start_exponent()
+    end_E = start_E + CHUNK_SIZE
     max_p = -1
-    best_num = None
-    total_checked = 0
-    hit_jackpot = False
+    best_P1 = None
+    total_evaluated = 0
     
-    current_str = get_start_candidate()
-    print(f"Resuming search from candidate ({len(current_str)} digits): {current_str}")
-
-    # Set duration to 4.5 hours (leaves 1.5 hours safety buffer for GitHub Actions)
-    run_duration = 4.5 * 60 * 60 
+    print(f"Resuming Base 10 search BEYOND history from Exponent Sum E = {start_E} to {end_E}...")
+    run_duration = 4.5 * 60 * 60
     start_time = time.time()
-    
-    while time.time() - start_time < run_duration:
-        current_str = next_candidate(current_str)
-        candidate = int(current_str)
-        
-        p = get_persistence(candidate)
-        
-        if p >= 12:
-            hit_jackpot = True
-            log_jackpot(candidate, p)
-            print(f"CRITICAL FIND: Persistence {p} on number {candidate}")
-            
-        if p > max_p:
-            max_p = p
-            best_num = candidate
-            
-        total_checked += 1
 
-    print("Time limit reached. Saving state and logs...")
-    save_state(current_str)
-    log_daily_summary(best_num, max_p, total_checked, current_str)
-    send_report(best_num, max_p, total_checked, hit_jackpot)
+    for E in range(start_E, end_E + 1):
+        if time.time() - start_time > run_duration:
+            print(f"Time limit reached. Saving state at E = {E}...")
+            save_state(E)
+            return
+
+        for a in range(E + 1):
+            for b in range(E + 1 - a):
+                for c in range(E + 1 - a - b):
+                    d = E - a - b - c
+                    
+                    # Skip zero-trap branches (5s combined with even digits)
+                    if c > 0 and a > 0:
+                        continue
+                    
+                    P1 = (2**a) * (3**b) * (5**c) * (7**d)
+                    p = 1 + get_persistence_b10(P1)
+                    total_evaluated += 1
+
+                    if p > max_p:
+                        max_p = p
+                        best_P1 = P1
+                        print(f"NEW HIGH: Persistence {max_p} at E={E}")
+                        
+                    if p >= 12:
+                        print(f"🚨 WORLD RECORD! Persistence {p} found! P1 = {P1}")
+
+    save_state(end_E + 1)
+    print(f"Finished chunk. Next run starts at E = {end_E + 1}")
 
 if __name__ == "__main__":
-    search_and_report()
+    search_base10_beyond_history()

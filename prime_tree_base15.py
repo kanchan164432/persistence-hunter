@@ -13,7 +13,6 @@ HISTORY_FILE = "daily_history_prime15.json"
 JACKPOT_FILE = "jackpots_prime15.json"
 
 DEFAULT_START_E = 1
-CHUNK_SIZE = 15  # Number of exponent sum levels to evaluate per 4.5-hour run
 
 def load_start_exponent():
     if os.path.exists(STATE_FILE):
@@ -100,36 +99,37 @@ def send_report(best_p, best_exp, total_checked, hit_jackpot):
         print(f"Failed to send email: {e}")
 
 def search_base15_prime_tree():
-    start_E = load_start_exponent()
-    end_E = start_E + CHUNK_SIZE
+    current_E = load_start_exponent()
     max_p = -1
     best_exp = None
     total_checked = 0
     hit_jackpot = False
     
-    print(f"Resuming Base 15 Prime Tree Search from E = {start_E} to {end_E}...")
+    # Run duration set to 4.5 hours (16,200 seconds)
     run_duration = 4.5 * 60 * 60
     start_time = time.time()
 
-    for E in range(start_E, end_E + 1):
-        if time.time() - start_time > run_duration:
-            print(f"Time limit reached. Saving state at E = {E}...")
-            save_state(E)
-            log_daily_summary(max_p, best_exp, total_checked, E)
-            send_report(max_p, best_exp, total_checked, hit_jackpot)
-            return
+    print(f"Starting continuous Base 15 search at Exponent Sum E = {current_E}...")
 
-        for a in range(E + 1):
-            for b in range(E + 1 - a):
-                for c in range(E + 1 - a - b):
-                    # Base 15 Zero-Trap Optimization: 15 = 3 * 5.
-                    # If P1 contains both 3 (b > 0) and 5 (c > 0), P1 % 15 == 0 (ends in 0 in Base 15).
+    # Continuous execution loop until time runs out
+    while time.time() - start_time < run_duration:
+        time_expired = False
+
+        for a in range(current_E + 1):
+            if time.time() - start_time >= run_duration:
+                time_expired = True
+                break
+
+            for b in range(current_E + 1 - a):
+                for c in range(current_E + 1 - a - b):
+                    # Zero-Trap Pruning: 15 = 3 * 5. 
+                    # If P1 contains 3 (b > 0) and 5 (c > 0), P1 % 15 == 0 (terminates at Step 2).
                     if b > 0 and c > 0:
                         continue
                         
-                    for d in range(E + 1 - a - b - c):
-                        for e in range(E + 1 - a - b - c - d):
-                            f = E - a - b - c - d - e
+                    for d in range(current_E + 1 - a - b - c):
+                        for e in range(current_E + 1 - a - b - c - d):
+                            f = current_E - a - b - c - d - e
                             
                             # Candidate product P1 = 2^a * 3^b * 5^c * 7^d * 11^e * 13^f
                             P1 = (2**a) * (3**b) * (5**c) * (7**d) * (11**e) * (13**f)
@@ -137,22 +137,27 @@ def search_base15_prime_tree():
                             p = 1 + get_persistence_b15(P1)
                             total_checked += 1
 
-                            # Jackpot threshold set to target persistence >= 16
                             if p >= 16:
                                 hit_jackpot = True
                                 exps = {"2": a, "3": b, "5": c, "7": d, "11": e, "13": f}
-                                log_jackpot(E, exps, P1, p)
-                                print(f"🚨 WORLD RECORD: Persistence {p} at E={E}! Exponents: {exps}")
+                                log_jackpot(current_E, exps, P1, p)
+                                print(f"🚨 WORLD RECORD: Persistence {p} at E={current_E}! Exponents: {exps}")
 
                             if p > max_p:
                                 max_p = p
                                 best_exp = {"2": a, "3": b, "5": c, "7": d, "11": e, "13": f}
-                                print(f"NEW BASE 15 HIGH: Persistence {max_p} at E={E}")
+                                print(f"NEW BASE 15 HIGH: Persistence {max_p} at E={current_E}")
 
-    save_state(end_E + 1)
-    log_daily_summary(max_p, best_exp, total_checked, end_E + 1)
+        if time_expired:
+            break
+            
+        # Move to the next exponent level if time remains
+        current_E += 1
+
+    print(f"\n4.5-Hour Time limit reached. Saving state at E = {current_E}...")
+    save_state(current_E)
+    log_daily_summary(max_p, best_exp, total_checked, current_E)
     send_report(max_p, best_exp, total_checked, hit_jackpot)
-    print(f"Finished chunk. Saved next state E = {end_E + 1}")
 
 if __name__ == "__main__":
     search_base15_prime_tree()

@@ -1,4 +1,4 @@
-name: C++ Base 17 Search & Email Report
+name: C++ Base 17 Continuous Search
 
 on:
   workflow_dispatch:
@@ -56,8 +56,7 @@ jobs:
               f"C++ Base 17 Multiplicative Persistence Report\n"
               f"----------------------------------------------\n"
               f"Max Persistence Found: {data[\"max_persistence\"]}\n"
-              f"Exponent Sum Level (E): {data[\"ended_E\"]}\n"
-              f"C++ Execution Time: {data[\"elapsed_seconds\"]:.2f} seconds\n"
+              f"Search Advanced To Exponent Sum (E): {data[\"ended_E\"]}\n"
           )
           msg.set_content(body)
 
@@ -70,11 +69,11 @@ jobs:
               print(f"Failed to send email: {e}")
           '
 
-      - name: Commit and Push Updated Results
+      - name: Commit and Push Updated State and Results
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add results_b17.json
-          git commit -m "Automated C++ update: Base 17 results" || echo "No changes to commit"
+          git add state_b17.txt results_b17.json
+          git commit -m "Automated C++ update: Advance Base 17 state" || echo "No changes to commit"
           git pull --rebase origin main
           git push origin main

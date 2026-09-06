@@ -1,0 +1,41 @@
+name: Continuous Base 16 Persistence Hunt
+
+on:
+  schedule:
+    - cron: '30 */6 * * *'  # Runs every 6 hours (offset by 30 mins to avoid overlap)
+  workflow_dispatch:
+
+concurrency:
+  group: persistence-hunter-base16
+  cancel-in-progress: false
+
+jobs:
+  run-base16-hunt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run Base 16 Persistence Script
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+        run: python main_base16.py
+
+      - name: Commit and Push Updated State
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m "Automated update: Save Base 16 state and history" || echo "No changes to commit"
+          git pull --rebase origin main
+          git push origin main

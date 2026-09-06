@@ -1,0 +1,80 @@
+name: C++ Base 17 Search & Email Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 */6 * * *'  # Runs every 6 hours
+
+jobs:
+  run-cpp-base17:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install C++ Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libboost-dev
+
+      - name: Compile High-Performance Base 17 C++ Code
+        run: |
+          g++ -O3 -fopenmp prime_tree_b17.cpp -o cpp_search17
+
+      - name: Execute Base 17 C++ Search
+        run: |
+          ./cpp_search17
+
+      - name: Send Email Report
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+        run: |
+          python3 -c '
+          import os, smtplib, json
+          from email.message import EmailMessage
+
+          user = os.environ.get("EMAIL_USER")
+          pwd = os.environ.get("EMAIL_PASS")
+
+          if not user or not pwd:
+              print("Email secrets missing. Skipping email step.")
+              exit(0)
+
+          with open("results_b17.json") as f:
+              data = json.load(f)
+
+          msg = EmailMessage()
+          msg["Subject"] = f"C++ Base 17 Report: Max Persistence {data[\"max_persistence\"]}"
+          msg["From"] = user
+          msg["To"] = user
+          
+          body = (
+              f"C++ Base 17 Multiplicative Persistence Report\n"
+              f"----------------------------------------------\n"
+              f"Max Persistence Found: {data[\"max_persistence\"]}\n"
+              f"Exponent Sum Level (E): {data[\"ended_E\"]}\n"
+              f"C++ Execution Time: {data[\"elapsed_seconds\"]:.2f} seconds\n"
+          )
+          msg.set_content(body)
+
+          try:
+              with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                  server.login(user, pwd)
+                  server.send_message(msg)
+              print("Base 17 Email report sent successfully!")
+          except Exception as e:
+              print(f"Failed to send email: {e}")
+          '
+
+      - name: Commit and Push Updated Results
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add results_b17.json
+          git commit -m "Automated C++ update: Base 17 results" || echo "No changes to commit"
+          git pull --rebase origin main
+          git push origin main

@@ -1,4 +1,4 @@
-name: C++ Base 15 Search & Email Report
+name: C++ Base 15 Continuous Search
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     - cron: '0 */6 * * *'  # Runs every 6 hours
 
 jobs:
-  run-cpp-search:
+  run-cpp-base15:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -22,11 +22,11 @@ jobs:
 
       - name: Compile High-Performance C++ Code
         run: |
-          g++ -O3 -fopenmp prime_tree_b15.cpp -o cpp_search
+          g++ -O3 -fopenmp prime_tree_b15.cpp -o cpp_search15
 
-      - name: Execute C++ Search
+      - name: Execute 4.5-Hour Base 15 Search
         run: |
-          ./cpp_search
+          ./cpp_search15
 
       - name: Send Email Report
         env:
@@ -48,16 +48,15 @@ jobs:
               data = json.load(f)
 
           msg = EmailMessage()
-          msg["Subject"] = f"C++ Base 15 Search Complete: Max Persistence {data[\"max_persistence\"]}"
+          msg["Subject"] = f"C++ Base 15 Progress Report: Max Persistence {data[\"max_persistence\"]}"
           msg["From"] = user
           msg["To"] = user
           
           body = (
-              f"C++ Base 15 Multiplicative Persistence Search Report\n"
-              f"--------------------------------------------------\n"
+              f"C++ Base 15 Multiplicative Persistence Report\n"
+              f"----------------------------------------------\n"
               f"Max Persistence Found: {data[\"max_persistence\"]}\n"
-              f"Exponent Sum Search Limit (E): {data[\"ended_E\"]}\n"
-              f"Total C++ Execution Time: {data[\"elapsed_seconds\"]:.2f} seconds\n"
+              f"Search Advanced To Exponent Sum (E): {data[\"ended_E\"]}\n"
           )
           msg.set_content(body)
 
@@ -65,16 +64,16 @@ jobs:
               with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
                   server.login(user, pwd)
                   server.send_message(msg)
-              print("Email report sent successfully!")
+              print("Base 15 Email report sent successfully!")
           except Exception as e:
               print(f"Failed to send email: {e}")
           '
 
-      - name: Commit and Push Updated Results
+      - name: Commit and Push Updated State and Results
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add results_b15.json
-          git commit -m "Automated C++ update: Base 15 results" || echo "No changes to commit"
+          git add state_b15.txt results_b15.json
+          git commit -m "Automated C++ update: Advance Base 15 state" || echo "No changes to commit"
           git pull --rebase origin main
           git push origin main

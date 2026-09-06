@@ -11,8 +11,7 @@ using namespace std;
 int get_persistence_b15(cpp_int n) {
     int steps = 0;
     while (n >= 15) {
-        cpp_int prod = 1;
-        cpp_int temp = n;
+        cpp_int prod = 1, temp = n;
         while (temp > 0) {
             prod *= (temp % 15);
             temp /= 15;
@@ -24,26 +23,34 @@ int get_persistence_b15(cpp_int n) {
 }
 
 int main() {
-    int start_E = 1;
-    int end_E = 100; // Deep search depth for C++
+    int current_E = 1;
+    ifstream state_in("state_b15.txt");
+    if (state_in >> current_E) state_in.close();
+
     int max_p = -1;
-
-    cout << "Starting C++ Base 15 Search (E = " << start_E << " to " << end_E << ")..." << endl;
     auto start_time = chrono::high_resolution_clock::now();
+    double run_duration = 4.5 * 3600; // Run continuously for 4.5 hours
 
-    for (int E = start_E; E <= end_E; ++E) {
+    cout << "Resuming C++ Base 15 Search from Exponent Sum E = " << current_E << "..." << endl;
+
+    while (true) {
+        auto now = chrono::high_resolution_clock::now();
+        chrono::duration<double> elapsed = now - start_time;
+        if (elapsed.count() >= run_duration) break;
+
         int local_max_p = -1;
 
         #pragma omp parallel for reduction(max:local_max_p) schedule(dynamic)
-        for (int a = 0; a <= E; ++a) {
-            for (int b = 0; b <= E - a; ++b) {
-                for (int c = 0; c <= E - a - b; ++c) {
-                    // Zero-Trap Optimization: 15 = 3 * 5. Skip if both factors exist.
+        for (int a = 0; a <= current_E; ++a) {
+            for (int b = 0; b <= current_E - a; ++b) {
+                for (int c = 0; c <= current_E - a - b; ++c) {
+                    // Zero-Trap Optimization: 15 = 3 * 5. 
+                    // Skip any branch containing both factors 3 and 5 (ends in 0 in Base 15).
                     if (b > 0 && c > 0) continue;
 
-                    for (int d = 0; d <= E - a - b - c; ++d) {
-                        for (int e = 0; e <= E - a - b - c - d; ++e) {
-                            int f = E - a - b - c - d - e;
+                    for (int d = 0; d <= current_E - a - b - c; ++d) {
+                        for (int e = 0; e <= current_E - a - b - c - d; ++e) {
+                            int f = current_E - a - b - c - d - e;
 
                             cpp_int P1 = pow(cpp_int(2), a) * pow(cpp_int(3), b) *
                                         pow(cpp_int(5), c) * pow(cpp_int(7), d) *
@@ -51,14 +58,14 @@ int main() {
 
                             int p = 1 + get_persistence_b15(P1);
 
-                            if (p > local_max_p) {
-                                local_max_p = p;
-                            }
+                            if (p > local_max_p) local_max_p = p;
+
+                            // Threshold set to >= 12 (Current known Base 15 max is 11)
                             if (p >= 12) {
                                 #pragma omp critical
                                 {
                                     cout << "🚨 WORLD RECORD: Base 15 Persistence " << p 
-                                         << " at E=" << E << "!" << endl;
+                                         << " at E=" << current_E << "!" << endl;
                                 }
                             }
                         }
@@ -66,23 +73,19 @@ int main() {
                 }
             }
         }
-        if (local_max_p > max_p) {
-            max_p = local_max_p;
-        }
+        if (local_max_p > max_p) max_p = local_max_p;
+        current_E++;
     }
 
-    auto end_time = chrono::high_resolution_clock::now();
-    chrono::duration<double> elapsed = end_time - start_time;
+    // Save state for next run
+    ofstream state_out("state_b15.txt");
+    state_out << current_E;
+    state_out.close();
 
-    // Save output to JSON for Python email reporter
     ofstream out("results_b15.json");
-    out << "{\n";
-    out << "  \"max_persistence\": " << max_p << ",\n";
-    out << "  \"ended_E\": " << end_E << ",\n";
-    out << "  \"elapsed_seconds\": " << elapsed.count() << "\n";
-    out << "}\n";
+    out << "{\n  \"max_persistence\": " << max_p << ",\n  \"ended_E\": " << (current_E - 1) << "\n}\n";
     out.close();
 
-    cout << "Search complete. Saved results to results_b15.json." << endl;
+    cout << "Search paused after 4.5 hours at E = " << current_E << ". Saved state to state_b15.txt." << endl;
     return 0;
 }
